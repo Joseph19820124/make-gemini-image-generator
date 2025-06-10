@@ -1,0 +1,61 @@
+{
+  "name": "make-gemini-image-generator",
+  "version": "1.0.0",
+  "description": "Make.com自定义模块：Google Gemini图片生成集成",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "lint": "eslint src/**/*.js",
+    "lint:fix": "eslint src/**/*.js --fix",
+    "build": "webpack --mode production",
+    "deploy": "npm run build && npm run test"
+  },
+  "keywords": [
+    "make.com",
+    "gemini",
+    "image-generation",
+    "ai",
+    "automation",
+    "google-ai",
+    "imagen",
+    "no-code"
+  ],
+  "author": "Make.com Community",
+  "license": "MIT",
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "axios": "^1.7.0",
+    "express": "^4.19.0",
+    "multer": "^1.4.5",
+    "sharp": "^0.33.0",
+    "dotenv": "^16.4.0",
+    "joi": "^17.13.0",
+    "uuid": "^10.0.0",
+    "form-data": "^4.0.0",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.3.0",
+    "webpack": "^5.91.0",
+    "webpack-cli": "^5.1.0",
+    "supertest": "^7.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Joseph19820124/make-gemini-image-generator.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Joseph19820124/make-gemini-image-generator/issues"
+  },
+  "homepage": "https://github.com/Joseph19820124/make-gemini-image-generator#readme"
+}
