@@ -1,0 +1,355 @@
+{
+  "name": "Content Creation Pipeline with Story Illustrations",
+  "description": "Automated content creation workflow that generates stories with accompanying illustrations",
+  "version": "1.0.0",
+  "workflow": {
+    "trigger": {
+      "type": "schedule",
+      "name": "Daily Content Generation",
+      "description": "Triggers daily content creation",
+      "schedule": "0 9 * * *",
+      "timezone": "UTC",
+      "inputs": {
+        "content_type": "string",
+        "target_audience": "string",
+        "theme": "string",
+        "word_count": "number"
+      }
+    },
+    "modules": [
+      {
+        "id": 1,
+        "name": "Content Planning",
+        "app": "airtable",
+        "module": "search-records",
+        "description": "Get today's content plan from editorial calendar",
+        "configuration": {
+          "base": "Editorial Calendar",
+          "table": "Content Plan",
+          "filter": "AND(IS_SAME({Publication Date}, TODAY(), 'day'), {Status} = 'Planned')",
+          "max_records": 1
+        },
+        "outputs": {
+          "content_plan": "object",
+          "story_theme": "string",
+          "target_audience": "string",
+          "content_type": "string"
+        }
+      },
+      {
+        "id": 2,
+        "name": "Generate Story Content",
+        "app": "openai",
+        "module": "create-completion",
+        "description": "Generate story based on the content plan",
+        "configuration": {
+          "model": "gpt-4",
+          "prompt": "Create an engaging {{module1.content_type}} story with the following specifications:\n\nTheme: {{module1.story_theme}}\nTarget Audience: {{module1.target_audience}}\nTone: Inspiring and educational\nLength: 800-1000 words\n\nThe story should have clear scenes that can be illustrated, with vivid descriptions of characters, settings, and key moments. Include dialogue and emotional moments that resonate with the target audience.",
+          "max_tokens": 1200,
+          "temperature": 0.7
+        },
+        "outputs": {
+          "story_content": "string",
+          "estimated_reading_time": "number"
+        }
+      },
+      {
+        "id": 3,
+        "name": "Analyze Story Structure",
+        "app": "gemini-image-generator",
+        "module": "story-illustration/analyze",
+        "description": "Analyze the story to identify key scenes for illustration",
+        "configuration": {
+          "story": "{{module2.story_content}}",
+          "language": "auto"
+        },
+        "outputs": {
+          "story_analysis": "object",
+          "key_scenes": "array",
+          "characters": "array",
+          "themes": "array"
+        }
+      },
+      {
+        "id": 4,
+        "name": "Generate Story Illustrations",
+        "app": "gemini-image-generator",
+        "module": "story-illustration/generate",
+        "description": "Create illustrations for the story",
+        "configuration": {
+          "story": "{{module2.story_content}}",
+          "illustrationStyle": "storybook",
+          "maxIllustrations": 6,
+          "maintainConsistency": true,
+          "characterConsistency": true,
+          "generateTitle": true,
+          "language": "auto"
+        },
+        "outputs": {
+          "illustrations": "array",
+          "story_metadata": "object",
+          "suggested_titles": "array"
+        }
+      },
+      {
+        "id": 5,
+        "name": "Create Cover Image",
+        "app": "gemini-image-generator",
+        "module": "generate-image",
+        "description": "Generate an eye-catching cover image",
+        "configuration": {
+          "prompt": "Book cover design for '{{module4.suggested_titles[0]}}', featuring {{join(module3.characters, ' and ')}}, {{module3.themes[0]}} theme, storybook illustration style, title text overlay, professional book cover design",
+          "style": "storybook",
+          "resolution": "1024x1792",
+          "quality": "hd",
+          "imageCount": 3
+        },
+        "outputs": {
+          "cover_options": "array"
+        }
+      },
+      {
+        "id": 6,
+        "name": "Generate Social Media Assets",
+        "app": "gemini-image-generator",
+        "module": "batch-generate",
+        "description": "Create social media promotional images",
+        "configuration": {
+          "prompts": [
+            "Instagram post for '{{module4.suggested_titles[0]}}', featuring main character, engaging social media style, story preview",
+            "Facebook cover image for '{{module4.suggested_titles[0]}}', wide format, story theme, eye-catching design",
+            "Twitter card for '{{module4.suggested_titles[0]}}', compact design, story highlights, social media optimized",
+            "Pinterest pin for '{{module4.suggested_titles[0]}}', vertical format, story illustration, pin-worthy design"
+          ],
+          "style": "social-media",
+          "maintainConsistency": true
+        },
+        "outputs": {
+          "social_assets": "array"
+        }
+      },
+      {
+        "id": 7,
+        "name": "Create Interactive Elements",
+        "app": "gemini-image-generator",
+        "module": "generate-image",
+        "description": "Generate interactive story elements like character sheets",
+        "configuration": {
+          "prompt": "Character reference sheet for {{module3.characters[0]}}, multiple poses and expressions, character design sheet, model sheet style, consistent character design",
+          "style": "character-design",
+          "resolution": "1024x1024",
+          "imageCount": 1
+        },
+        "outputs": {
+          "character_sheets": "array"
+        }
+      },
+      {
+        "id": 8,
+        "name": "Compile Story Package",
+        "app": "tools",
+        "module": "json-composer",
+        "description": "Compile all story assets into a complete package",
+        "configuration": {
+          "package": {
+            "story": {
+              "title": "{{module4.suggested_titles[0]}}",
+              "content": "{{module2.story_content}}",
+              "word_count": "{{length(split(module2.story_content, ' '))}}",
+              "reading_time": "{{module2.estimated_reading_time}}",
+              "theme": "{{module1.story_theme}}",
+              "target_audience": "{{module1.target_audience}}"
+            },
+            "assets": {
+              "cover_image": "{{module5.cover_options[0]}}",
+              "illustrations": "{{module4.illustrations}}",
+              "character_sheets": "{{module7.character_sheets}}",
+              "social_media": "{{module6.social_assets}}"
+            },
+            "metadata": {
+              "created_at": "{{now}}",
+              "characters": "{{module3.characters}}",
+              "themes": "{{module3.themes}}",
+              "scene_count": "{{length(module4.illustrations)}}",
+              "total_assets": "{{add(length(module4.illustrations), length(module5.cover_options), length(module6.social_assets))}}"
+            }
+          }
+        },
+        "outputs": {
+          "story_package": "object"
+        }
+      },
+      {
+        "id": 9,
+        "name": "Upload to Content Management",
+        "app": "wordpress",
+        "module": "create-post",
+        "description": "Publish the story to WordPress with images",
+        "configuration": {
+          "title": "{{module8.story_package.story.title}}",
+          "content": "{{module8.story_package.story.content}}",
+          "featured_image": "{{module8.story_package.assets.cover_image.url}}",
+          "gallery_images": "{{module8.story_package.assets.illustrations[*].url}}",
+          "status": "draft",
+          "categories": ["Stories", "{{module1.target_audience}}"],
+          "tags": "{{module3.themes}}",
+          "custom_fields": {
+            "reading_time": "{{module8.story_package.story.reading_time}}",
+            "word_count": "{{module8.story_package.story.word_count}}",
+            "illustration_count": "{{length(module8.story_package.assets.illustrations)}}"
+          }
+        },
+        "outputs": {
+          "post_id": "number",
+          "post_url": "string"
+        }
+      },
+      {
+        "id": 10,
+        "name": "Generate Audio Narration",
+        "app": "elevenlabs",
+        "module": "text-to-speech",
+        "description": "Create audio narration for the story",
+        "configuration": {
+          "text": "{{module2.story_content}}",
+          "voice_id": "storyteller",
+          "model": "eleven_multilingual_v2",
+          "voice_settings": {
+            "stability": 0.5,
+            "similarity_boost": 0.8,
+            "style": 0.2
+          }
+        },
+        "outputs": {
+          "audio_url": "string",
+          "audio_duration": "number"
+        }
+      },
+      {
+        "id": 11,
+        "name": "Create Video Slideshow",
+        "app": "video-editor",
+        "module": "create-slideshow",
+        "description": "Combine illustrations with narration to create a video",
+        "configuration": {
+          "images": "{{module4.illustrations[*].url}}",
+          "audio": "{{module10.audio_url}}",
+          "duration_per_slide": 8,
+          "transition_type": "fade",
+          "output_format": "mp4",
+          "resolution": "1920x1080"
+        },
+        "outputs": {
+          "video_url": "string",
+          "video_duration": "number"
+        }
+      },
+      {
+        "id": 12,
+        "name": "Update Editorial Calendar",
+        "app": "airtable",
+        "module": "update-record",
+        "description": "Mark content as completed and add asset links",
+        "configuration": {
+          "base": "Editorial Calendar",
+          "table": "Content Plan",
+          "record_id": "{{module1.content_plan.id}}",
+          "fields": {
+            "Status": "Published",
+            "Story Title": "{{module8.story_package.story.title}}",
+            "Word Count": "{{module8.story_package.story.word_count}}",
+            "Illustration Count": "{{length(module8.story_package.assets.illustrations)}}",
+            "WordPress URL": "{{module9.post_url}}",
+            "Video URL": "{{module11.video_url}}",
+            "Completed Date": "{{now}}",
+            "Total Assets": "{{module8.story_package.metadata.total_assets}}"
+          }
+        }
+      },
+      {
+        "id": 13,
+        "name": "Schedule Social Media Posts",
+        "app": "buffer",
+        "module": "schedule-post",
+        "description": "Schedule promotional posts across social platforms",
+        "configuration": {
+          "profiles": ["instagram", "facebook", "twitter", "pinterest"],
+          "posts": [
+            {
+              "text": "📚 New story published: {{module8.story_package.story.title}}! 🎨\n\nA magical tale about {{join(module3.themes, ' and ')}} featuring {{join(module3.characters, ' and ')}}. Perfect for {{module1.target_audience}}!\n\n✨ {{length(module4.illustrations)}} beautiful illustrations\n🎧 Audio narration available\n📺 Video slideshow included\n\n#storytelling #illustrations #{{module1.target_audience}}",
+              "image": "{{module6.social_assets[0].url}}",
+              "schedule_time": "{{add(now, hours(2))}}"
+            }
+          ]
+        }
+      },
+      {
+        "id": 14,
+        "name": "Analytics & Reporting",
+        "app": "google-analytics",
+        "module": "track-event",
+        "description": "Track content creation metrics",
+        "configuration": {
+          "event_name": "story_content_created",
+          "parameters": {
+            "story_title": "{{module8.story_package.story.title}}",
+            "theme": "{{module1.story_theme}}",
+            "target_audience": "{{module1.target_audience}}",
+            "word_count": "{{module8.story_package.story.word_count}}",
+            "illustration_count": "{{length(module4.illustrations)}}",
+            "creation_time": "{{workflow.duration}}",
+            "has_audio": "{{if(module10.audio_url, true, false)}}",
+            "has_video": "{{if(module11.video_url, true, false)}}"
+          }
+        }
+      }
+    ],
+    "parallel_execution": [
+      {
+        "group": "content_generation",
+        "modules": [5, 6, 7],
+        "description": "Generate visual assets in parallel after story analysis"
+      },
+      {
+        "group": "media_creation",
+        "modules": [10, 11],
+        "description": "Create audio and video content simultaneously"
+      }
+    ],
+    "quality_gates": [
+      {
+        "checkpoint": "after_module_2",
+        "condition": "{{length(module2.story_content)}} > 500",
+        "action": "continue",
+        "failure_action": "regenerate_story"
+      },
+      {
+        "checkpoint": "after_module_4",
+        "condition": "{{length(module4.illustrations)}} >= 3",
+        "action": "continue",
+        "failure_action": "retry_illustration"
+      }
+    ]
+  },
+  "configuration_options": {
+    "story_styles": [
+      "children_book",
+      "young_adult",
+      "educational",
+      "inspirational",
+      "adventure"
+    ],
+    "illustration_styles": [
+      "storybook",
+      "watercolor",
+      "cartoon",
+      "realistic",
+      "minimalist"
+    ],
+    "output_formats": {
+      "text": ["html", "markdown", "pdf"],
+      "audio": ["mp3", "wav"],
+      "video": ["mp4", "mov", "webm"]
+    }
+  }
+}

@@ -1,21 +1,20 @@
 {
-  "name": "E-commerce Product Image Generation",
-  "description": "Automatically generate product images for new inventory items",
+  "name": "E-commerce Product Image Generator",
+  "description": "Automatically generate product lifestyle images for new e-commerce listings",
   "version": "1.0.0",
   "workflow": {
     "trigger": {
-      "type": "airtable",
+      "type": "webhook",
       "name": "New Product Added",
-      "description": "Triggered when a new product is added to inventory",
-      "table": "Products",
-      "view": "Needs Images",
+      "description": "Triggered when a new product is added to the catalog",
       "inputs": {
         "product_id": "string",
         "product_name": "string",
         "description": "string",
         "category": "string",
         "price": "number",
-        "features": "array",
+        "color": "string",
+        "material": "string",
         "target_audience": "string",
         "brand": "string"
       }
@@ -23,310 +22,250 @@
     "modules": [
       {
         "id": 1,
-        "name": "Generate Product Variants",
-        "app": "gemini-image-generator",
-        "module": "batch-generate",
-        "description": "Generate multiple product image variants",
+        "name": "Product Analysis",
+        "app": "openai",
+        "module": "create-completion",
+        "description": "Analyze product to create optimal image prompts",
         "configuration": {
-          "prompts": [
-            "{{trigger.product_name}}, professional product photography, white background, studio lighting, high-end commercial style",
-            "{{trigger.product_name}}, lifestyle setting, {{trigger.target_audience}} using the product, natural lighting, realistic scene",
-            "{{trigger.product_name}}, close-up detail shot, macro photography, highlighting key features, premium quality",
-            "{{trigger.product_name}}, 45-degree angle, professional e-commerce style, clean background, sharp focus"
-          ],
-          "model": "imagen-4",
-          "resolution": "1024x1024",
-          "style": "realistic",
-          "quality": "hd",
-          "maintainConsistency": true
+          "model": "gpt-4",
+          "prompt": "Analyze this product and suggest 5 different lifestyle image scenarios:\n\nProduct: {{trigger.product_name}}\nDescription: {{trigger.description}}\nCategory: {{trigger.category}}\nTarget Audience: {{trigger.target_audience}}\n\nProvide specific, detailed prompts for lifestyle photography that would appeal to the target audience.",
+          "max_tokens": 500
         },
         "outputs": {
-          "product_images": "array",
-          "generation_summary": "object"
+          "analysis": "string",
+          "image_scenarios": "array"
         }
       },
       {
         "id": 2,
-        "name": "Generate Brand Consistent Set",
+        "name": "Generate Lifestyle Images",
         "app": "gemini-image-generator",
-        "module": "generate-consistent-set",
-        "description": "Generate brand-consistent product images",
+        "module": "batch-generate",
+        "description": "Generate multiple lifestyle product images",
         "configuration": {
-          "basePrompt": "{{trigger.brand}} {{trigger.product_name}}, premium product photography",
+          "prompts": [
+            "{{trigger.product_name}}, elegant lifestyle setting, professional product photography, soft lighting, {{trigger.color}} color scheme",
+            "{{trigger.product_name}}, in use by {{trigger.target_audience}}, natural environment, candid photography style",
+            "{{trigger.product_name}}, minimalist white background, studio lighting, commercial photography",
+            "{{trigger.product_name}}, cozy home environment, warm lighting, lifestyle context",
+            "{{trigger.product_name}}, modern urban setting, trendy atmosphere, contemporary style"
+          ],
+          "style": "realistic",
+          "resolution": "1024x1024",
+          "quality": "hd",
+          "maintainConsistency": true
+        },
+        "outputs": {
+          "images": "array",
+          "metadata": "object"
+        }
+      },
+      {
+        "id": 3,
+        "name": "Generate Product Variations",
+        "app": "gemini-image-generator",
+        "module": "consistent",
+        "description": "Generate consistent product images with different angles",
+        "configuration": {
+          "basePrompt": "{{trigger.product_name}}, professional product photography, clean background",
           "variations": [
-            "white background, studio lighting",
-            "lifestyle environment, in use",
-            "packaging and product together",
-            "multiple angles composition"
+            "front view",
+            "side view", 
+            "top view",
+            "detail close-up",
+            "packaging view"
           ],
           "style": "realistic",
           "resolution": "1024x1024"
         },
         "outputs": {
-          "brand_images": "array"
-        }
-      },
-      {
-        "id": 3,
-        "name": "Enhance Image Quality",
-        "app": "gemini-image-generator",
-        "module": "edit-image",
-        "description": "Enhance the best generated images",
-        "iterator": "{{1.product_images}}",
-        "configuration": {
-          "prompt": "Enhance image quality, increase sharpness and clarity, professional commercial photography style",
-          "inputImage": "{{item.url}}",
-          "editMode": "enhance",
-          "strength": 0.7
-        },
-        "outputs": {
-          "enhanced_images": "array"
+          "product_variations": "array"
         }
       },
       {
         "id": 4,
-        "name": "Create Image Variants",
-        "app": "tools",
-        "module": "image-resizer",
-        "description": "Create different sizes for various platforms",
+        "name": "Image Quality Check",
+        "app": "google-vision",
+        "module": "analyze-image",
+        "description": "Analyze generated images for quality and compliance",
         "configuration": {
-          "source_images": "{{3.enhanced_images}}",
-          "output_sizes": [
-            {
-              "name": "thumbnail",
-              "width": 300,
-              "height": 300,
-              "crop": "center"
-            },
-            {
-              "name": "medium",
-              "width": 600,
-              "height": 600,
-              "crop": "center"
-            },
-            {
-              "name": "large",
-              "width": 1200,
-              "height": 1200,
-              "crop": "center"
-            },
-            {
-              "name": "banner",
-              "width": 1920,
-              "height": 600,
-              "crop": "center"
-            }
-          ]
+          "image_urls": "{{module2.images[*].url}}",
+          "features": ["SAFE_SEARCH_DETECTION", "IMAGE_PROPERTIES", "OBJECT_LOCALIZATION"],
+          "max_results": 10
         },
         "outputs": {
-          "resized_images": "array"
+          "quality_scores": "array",
+          "safety_ratings": "array"
         }
       },
       {
         "id": 5,
-        "name": "Upload to Product CDN",
+        "name": "Upload to CDN",
         "app": "aws-s3",
         "module": "upload-file",
-        "description": "Upload images to CDN for fast delivery",
+        "description": "Upload approved images to CDN",
         "configuration": {
           "bucket": "product-images-cdn",
-          "files": "{{4.resized_images}}",
-          "folder": "products/{{trigger.category}}/{{trigger.product_id}}",
-          "public_access": true,
-          "cache_control": "max-age=31536000"
+          "folder": "products/{{trigger.product_id}}/generated",
+          "images": "{{module2.images}}",
+          "public_read": true,
+          "metadata": {
+            "product_id": "{{trigger.product_id}}",
+            "generated_at": "{{now}}",
+            "style": "lifestyle"
+          }
         },
         "outputs": {
           "cdn_urls": "array",
-          "upload_summary": "object"
+          "upload_status": "string"
         }
       },
       {
         "id": 6,
-        "name": "Update Product Database",
-        "app": "airtable",
-        "module": "update-record",
-        "description": "Update product record with image URLs",
+        "name": "Update Product Catalog",
+        "app": "shopify",
+        "module": "update-product",
+        "description": "Add generated images to product listing",
         "configuration": {
-          "table": "Products",
-          "record_id": "{{trigger.product_id}}",
-          "fields": {
-            "Image_URLs": "{{5.cdn_urls}}",
-            "Primary_Image": "{{first(5.cdn_urls)}}",
-            "Thumbnail_Image": "{{filter(5.cdn_urls; size; thumbnail)}}",
-            "Images_Generated": true,
-            "Generation_Date": "{{now}}",
-            "Image_Count": "{{length(5.cdn_urls)}}"
-          }
-        },
-        "outputs": {
-          "updated_record": "object"
+          "product_id": "{{trigger.product_id}}",
+          "images": {
+            "lifestyle_images": "{{module5.cdn_urls}}",
+            "product_variations": "{{module3.product_variations}}"
+          },
+          "alt_texts": [
+            "{{trigger.product_name}} lifestyle image 1",
+            "{{trigger.product_name}} lifestyle image 2",
+            "{{trigger.product_name}} in use",
+            "{{trigger.product_name}} detail view"
+          ]
         }
       },
       {
         "id": 7,
-        "name": "Sync to E-commerce Platform",
-        "app": "shopify",
-        "module": "update-product",
-        "description": "Update Shopify product with new images",
+        "name": "Generate Product Description",
+        "app": "gemini-ai",
+        "module": "create-completion",
+        "description": "Create compelling product description based on generated images",
         "configuration": {
-          "product_id": "{{trigger.product_id}}",
-          "images": {
-            "primary": "{{first(5.cdn_urls)}}",
-            "gallery": "{{5.cdn_urls}}",
-            "alt_text": "{{trigger.product_name}} - {{trigger.description}}"
-          },
-          "update_seo": true
+          "prompt": "Based on these lifestyle images and product details, create a compelling product description:\n\nProduct: {{trigger.product_name}}\nCategory: {{trigger.category}}\nTarget Audience: {{trigger.target_audience}}\nImages show: lifestyle settings, usage scenarios\n\nCreate a description that highlights the lifestyle benefits and emotional appeal.",
+          "max_length": 300
         },
         "outputs": {
-          "shopify_product": "object"
+          "enhanced_description": "string"
         }
       },
       {
         "id": 8,
-        "name": "Generate SEO Metadata",
-        "app": "openai",
-        "module": "text-completion",
-        "description": "Generate SEO-optimized alt text and descriptions",
+        "name": "Create Marketing Assets",
+        "app": "gemini-image-generator",
+        "module": "generate-image",
+        "description": "Generate additional marketing materials",
         "configuration": {
-          "prompt": "Generate SEO-optimized alt text and image descriptions for: {{trigger.product_name}}. Description: {{trigger.description}}. Features: {{join(trigger.features; ', ')}}. Create 4 different alt texts for the product images focusing on different aspects.",
-          "max_tokens": 200,
-          "temperature": 0.7
+          "prompt": "Marketing banner for {{trigger.product_name}}, professional e-commerce style, include product benefits, {{trigger.brand}} branding, call-to-action design",
+          "style": "professional",
+          "resolution": "1920x1080",
+          "imageCount": 2
         },
         "outputs": {
-          "seo_metadata": "string",
-          "alt_texts": "array"
+          "marketing_images": "array"
         }
       },
       {
         "id": 9,
-        "name": "Create Product Catalog Entry",
-        "app": "google-sheets",
-        "module": "add-row",
-        "description": "Add entry to product catalog spreadsheet",
+        "name": "Notify Team",
+        "app": "slack",
+        "module": "send-message",
+        "description": "Notify marketing team of new product images",
         "configuration": {
-          "spreadsheet": "Product Catalog 2025",
-          "worksheet": "Generated Images",
-          "values": {
-            "Product_ID": "{{trigger.product_id}}",
-            "Product_Name": "{{trigger.product_name}}",
-            "Category": "{{trigger.category}}",
-            "Brand": "{{trigger.brand}}",
-            "Generation_Date": "{{now}}",
-            "Primary_Image_URL": "{{first(5.cdn_urls)}}",
-            "Total_Images": "{{length(5.cdn_urls)}}",
-            "Shopify_Updated": "{{if(7.shopify_product; 'Yes'; 'No')}}",
-            "Status": "Completed"
-          }
-        },
-        "outputs": {
-          "catalog_entry": "object"
+          "channel": "#marketing",
+          "message": ":camera: New product images generated for *{{trigger.product_name}}*\n\n:white_check_mark: {{length(module2.images)}} lifestyle images\n:white_check_mark: {{length(module3.product_variations)}} product variations\n:white_check_mark: Marketing assets created\n\n:link: Product page: [View Product]({{product_url}})\n:chart_with_upwards_trend: Quality score: {{avg(module4.quality_scores)}}%",
+          "attachments": [
+            {
+              "title": "Generated Images Preview",
+              "image_url": "{{module2.images[0].url}}",
+              "fields": [
+                {
+                  "title": "Product ID",
+                  "value": "{{trigger.product_id}}",
+                  "short": true
+                },
+                {
+                  "title": "Category",
+                  "value": "{{trigger.category}}",
+                  "short": true
+                }
+              ]
+            }
+          ]
         }
       },
       {
         "id": 10,
-        "name": "Quality Check Notification",
-        "app": "slack",
-        "module": "send-message",
-        "description": "Notify team for manual quality review",
+        "name": "Analytics Tracking",
+        "app": "google-analytics",
+        "module": "track-event",
+        "description": "Track product image generation metrics",
         "configuration": {
-          "channel": "#product-team",
-          "message": {
-            "text": "🆕 New product images generated for {{trigger.product_name}}",
-            "blocks": [
-              {
-                "type": "header",
-                "text": {
-                  "type": "plain_text",
-                  "text": "Product Images Generated 📸"
-                }
-              },
-              {
-                "type": "section",
-                "fields": [
-                  {
-                    "type": "mrkdwn",
-                    "text": "*Product:*\n{{trigger.product_name}}"
-                  },
-                  {
-                    "type": "mrkdwn",
-                    "text": "*Category:*\n{{trigger.category}}"
-                  },
-                  {
-                    "type": "mrkdwn",
-                    "text": "*Images Generated:*\n{{length(5.cdn_urls)}}"
-                  },
-                  {
-                    "type": "mrkdwn",
-                    "text": "*Status:*\n✅ Uploaded to CDN\n{{if(7.shopify_product; '✅ Synced to Shopify'; '❌ Shopify sync failed')}}"
-                  }
-                ]
-              },
-              {
-                "type": "image",
-                "image_url": "{{first(5.cdn_urls)}}",
-                "alt_text": "{{trigger.product_name}} primary image"
-              },
-              {
-                "type": "actions",
-                "elements": [
-                  {
-                    "type": "button",
-                    "text": {
-                      "type": "plain_text",
-                      "text": "View All Images"
-                    },
-                    "url": "{{5.upload_summary.folder_url}}"
-                  },
-                  {
-                    "type": "button",
-                    "text": {
-                      "type": "plain_text",
-                      "text": "View on Shopify"
-                    },
-                    "url": "{{7.shopify_product.admin_url}}"
-                  }
-                ]
-              }
-            ]
+          "event_name": "product_images_generated",
+          "parameters": {
+            "product_id": "{{trigger.product_id}}",
+            "product_category": "{{trigger.category}}",
+            "image_count": "{{length(module2.images)}}",
+            "quality_score": "{{avg(module4.quality_scores)}}",
+            "generation_time": "{{workflow.duration}}",
+            "success": true
           }
         }
       }
-    ]
-  },
-  "connections": {
-    "gemini-connection": {
-      "type": "gemini-image-generator",
-      "configuration": {
-        "apiKey": "{{env.GOOGLE_AI_API_KEY}}",
-        "region": "us-central1"
+    ],
+    "conditional_logic": [
+      {
+        "condition": "{{avg(module4.quality_scores)}} < 70",
+        "action": "regenerate_images",
+        "description": "Regenerate images if quality score is too low"
+      },
+      {
+        "condition": "{{trigger.category}} == 'clothing'",
+        "action": "add_size_variations",
+        "description": "Generate additional size variation images for clothing"
       }
-    },
-    "airtable-connection": {
-      "type": "airtable",
-      "api_key": "{{env.AIRTABLE_API_KEY}}",
-      "base_id": "{{env.AIRTABLE_PRODUCTS_BASE_ID}}"
-    },
-    "aws-s3-connection": {
-      "type": "aws-s3",
-      "access_key": "{{env.AWS_ACCESS_KEY_ID}}",
-      "secret_key": "{{env.AWS_SECRET_ACCESS_KEY}}",
-      "region": "us-east-1"
-    },
-    "shopify-connection": {
-      "type": "shopify",
-      "shop_domain": "{{env.SHOPIFY_SHOP_DOMAIN}}",
-      "access_token": "{{env.SHOPIFY_ACCESS_TOKEN}}"
+    ],
+    "error_handling": {
+      "retry_policy": {
+        "max_retries": 2,
+        "backoff_strategy": "linear",
+        "retry_delay": 30
+      },
+      "fallback_actions": [
+        {
+          "condition": "module2.success == false",
+          "action": "use_stock_images",
+          "config": {
+            "source": "unsplash",
+            "search_terms": "{{trigger.category}} {{trigger.color}}"
+          }
+        }
+      ]
     }
   },
-  "settings": {
-    "error_handling": {
-      "continue_on_error": false,
-      "max_retries": 2,
-      "retry_delay": "10s"
-    },
-    "execution": {
-      "timeout": "15m",
-      "max_concurrent": 2
-    }
+  "optimization_tips": {
+    "image_quality": [
+      "Use specific product keywords in prompts",
+      "Include lighting and environment details",
+      "Specify target audience for lifestyle context",
+      "Maintain brand consistency in style choices"
+    ],
+    "performance": [
+      "Batch similar products together",
+      "Use consistent image resolutions",
+      "Implement image compression for web use",
+      "Cache frequently used prompt templates"
+    ],
+    "cost_optimization": [
+      "Set quality thresholds to avoid regeneration",
+      "Use lower resolution for preview images",
+      "Implement smart retry logic",
+      "Monitor API usage and set limits"
+    ]
   }
 }

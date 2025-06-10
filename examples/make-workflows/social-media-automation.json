@@ -39,208 +39,133 @@
         "name": "Generate Social Media Images",
         "app": "gemini-image-generator",
         "module": "batch-generate",
-        "description": "Generate images for different social media platforms",
+        "description": "Generate multiple social media images for different platforms",
         "configuration": {
           "prompts": [
-            "{{trigger.title}} - Instagram post style, vibrant colors, modern design",
-            "{{trigger.title}} - Facebook cover style, professional layout",
-            "{{trigger.title}} - Twitter header style, minimalist design",
-            "{{trigger.title}} - LinkedIn post style, business professional"
+            "{{trigger.title}}, professional social media style, clean background",
+            "{{trigger.title}}, Instagram story style, vibrant colors",
+            "{{trigger.title}}, LinkedIn post style, business professional",
+            "{{trigger.title}}, Twitter header style, engaging visual"
           ],
           "style": "professional",
           "resolution": "1080x1080",
           "maintainConsistency": true
         },
-        "mapping": {
-          "connection": "gemini-api-connection"
-        },
         "outputs": {
           "images": "array",
-          "summary": "object"
+          "metadata": "object"
         }
       },
       {
         "id": 3,
-        "name": "Add Text Overlay",
-        "app": "tools",
-        "module": "image-editor",
-        "description": "Add title and author text to generated images",
+        "name": "Instagram Post",
+        "app": "instagram",
+        "module": "create-post",
+        "description": "Post to Instagram with generated image",
         "configuration": {
-          "images": "{{2.images}}",
-          "text_overlay": {
-            "title": "{{trigger.title}}",
-            "author": "by {{trigger.author}}",
-            "position": "bottom-center",
-            "font_size": "large",
-            "text_color": "white",
-            "background_color": "rgba(0,0,0,0.7)"
-          }
-        },
-        "outputs": {
-          "processed_images": "array"
+          "image_url": "{{module2.images[0].url}}",
+          "caption": "📖 New blog post: {{trigger.title}}\n\n{{trigger.summary}}\n\n#blog #{{trigger.category}} {{join(trigger.tags, ' #')}}",
+          "location": "",
+          "alt_text": "Social media image for: {{trigger.title}}"
         }
       },
       {
         "id": 4,
-        "name": "Upload to Cloud Storage",
-        "app": "google-drive",
-        "module": "upload-file",
-        "description": "Save generated images to Google Drive",
+        "name": "Twitter Post",
+        "app": "twitter",
+        "module": "create-tweet",
+        "description": "Tweet with generated image",
         "configuration": {
-          "files": "{{3.processed_images}}",
-          "folder": "Social Media Images/{{trigger.category}}",
-          "name_pattern": "{{trigger.title}}_{{timestamp}}_{{platform}}"
-        },
-        "outputs": {
-          "uploaded_files": "array",
-          "folder_url": "string"
+          "text": "📝 Just published: {{trigger.title}}\n\n{{trigger.summary}}\n\n🔗 Read more: [blog-link]\n\n{{join(trigger.tags, ' #')}}",
+          "media_urls": ["{{module2.images[3].url}}"],
+          "reply_settings": "everyone"
         }
       },
       {
         "id": 5,
-        "name": "Post to Instagram",
-        "app": "instagram-business",
+        "name": "LinkedIn Post",
+        "app": "linkedin",
         "module": "create-post",
-        "description": "Post the Instagram-formatted image",
+        "description": "Share on LinkedIn with professional image",
         "configuration": {
-          "image": "{{filter(3.processed_images; platform; instagram)}}",
-          "caption": "{{trigger.title}}\n\n{{trigger.summary}}\n\n#{{join(trigger.tags; ' #')}}",
-          "account": "main-business-account"
-        },
-        "outputs": {
-          "post_id": "string",
-          "post_url": "string"
+          "text": "Excited to share my latest blog post: {{trigger.title}}\n\n{{trigger.summary}}\n\nWhat are your thoughts on this topic? Share your insights in the comments!\n\n{{join(trigger.tags, ' #')}}",
+          "media_url": "{{module2.images[2].url}}",
+          "visibility": "PUBLIC"
         }
       },
       {
         "id": 6,
-        "name": "Post to Twitter",
-        "app": "twitter",
-        "module": "create-tweet",
-        "description": "Post the Twitter-formatted image",
+        "name": "Save to Database",
+        "app": "database",
+        "module": "insert-record",
+        "description": "Save generated images and metadata to database",
         "configuration": {
-          "text": "{{trigger.title}}\n\n{{trigger.summary}}\n\n{{join(trigger.tags; ' #')}}",
-          "media": "{{filter(3.processed_images; platform; twitter)}}",
-          "account": "main-twitter-account"
-        },
-        "outputs": {
-          "tweet_id": "string",
-          "tweet_url": "string"
+          "table": "social_media_posts",
+          "data": {
+            "blog_title": "{{trigger.title}}",
+            "blog_category": "{{trigger.category}}",
+            "generated_images": "{{module2.images}}",
+            "instagram_post_id": "{{module3.id}}",
+            "twitter_post_id": "{{module4.id}}",
+            "linkedin_post_id": "{{module5.id}}",
+            "created_at": "{{now}}",
+            "status": "published"
+          }
         }
       },
       {
         "id": 7,
-        "name": "Post to LinkedIn",
-        "app": "linkedin",
-        "module": "create-post",
-        "description": "Post the LinkedIn-formatted image",
+        "name": "Analytics Tracking",
+        "app": "google-analytics",
+        "module": "track-event",
+        "description": "Track social media automation event",
         "configuration": {
-          "text": "{{trigger.title}}\n\n{{trigger.summary}}\n\nRead more: [Blog Link]",
-          "image": "{{filter(3.processed_images; platform; linkedin)}}",
-          "account": "company-linkedin-page"
-        },
-        "outputs": {
-          "post_id": "string",
-          "post_url": "string"
-        }
-      },
-      {
-        "id": 8,
-        "name": "Send Notification",
-        "app": "slack",
-        "module": "send-message",
-        "description": "Notify team about successful posting",
-        "configuration": {
-          "channel": "#marketing",
-          "message": {
-            "text": "🎉 Social media images generated and posted for: {{trigger.title}}",
-            "blocks": [
-              {
-                "type": "section",
-                "text": {
-                  "type": "mrkdwn",
-                  "text": "*New Blog Post Promoted*\n{{trigger.title}}"
-                }
-              },
-              {
-                "type": "section",
-                "fields": [
-                  {
-                    "type": "mrkdwn",
-                    "text": "*Author:*\n{{trigger.author}}"
-                  },
-                  {
-                    "type": "mrkdwn",
-                    "text": "*Category:*\n{{trigger.category}}"
-                  },
-                  {
-                    "type": "mrkdwn",
-                    "text": "*Instagram:*\n<{{5.post_url}}|View Post>"
-                  },
-                  {
-                    "type": "mrkdwn",
-                    "text": "*Twitter:*\n<{{6.tweet_url}}|View Tweet>"
-                  }
-                ]
-              }
-            ]
+          "event_name": "social_media_auto_post",
+          "parameters": {
+            "blog_title": "{{trigger.title}}",
+            "platforms": ["instagram", "twitter", "linkedin"],
+            "image_count": "{{length(module2.images)}}",
+            "automation_success": true
           }
         }
       }
-    ]
-  },
-  "connections": {
-    "gemini-api-connection": {
-      "type": "gemini-image-generator",
-      "name": "Gemini Image Generator",
-      "description": "Connection to Gemini Image Generation API",
-      "configuration": {
-        "apiKey": "{{env.GOOGLE_AI_API_KEY}}",
-        "region": "us-central1"
-      }
-    },
-    "google-drive-connection": {
-      "type": "google-drive",
-      "name": "Google Drive Storage",
-      "scopes": ["drive.file"]
-    },
-    "social-media-connections": {
-      "instagram": {
-        "type": "instagram-business",
-        "account_id": "{{env.INSTAGRAM_BUSINESS_ACCOUNT_ID}}"
-      },
-      "twitter": {
-        "type": "twitter",
-        "api_key": "{{env.TWITTER_API_KEY}}"
-      },
-      "linkedin": {
-        "type": "linkedin",
-        "company_id": "{{env.LINKEDIN_COMPANY_ID}}"
-      }
-    }
-  },
-  "settings": {
+    ],
     "error_handling": {
-      "continue_on_error": true,
-      "max_retries": 3,
-      "retry_delay": "5s"
-    },
-    "execution": {
-      "timeout": "10m",
-      "max_concurrent": 3
+      "retry_policy": {
+        "max_retries": 3,
+        "backoff_strategy": "exponential"
+      },
+      "fallback_actions": [
+        {
+          "condition": "module2.success == false",
+          "action": "send_notification",
+          "config": {
+            "message": "Image generation failed for blog post: {{trigger.title}}",
+            "channel": "slack"
+          }
+        }
+      ]
     }
   },
-  "variables": {
-    "brand_colors": {
-      "primary": "#007bff",
-      "secondary": "#6c757d",
-      "accent": "#28a745"
-    },
-    "image_templates": {
-      "instagram": "1080x1080",
-      "twitter": "1200x675",
-      "linkedin": "1200x627",
-      "facebook": "1200x630"
-    }
+  "setup_instructions": {
+    "prerequisites": [
+      "Gemini Image Generator module installed",
+      "Social media platform connections configured",
+      "Database connection established",
+      "Google Analytics tracking set up"
+    ],
+    "steps": [
+      "1. Import this workflow JSON into Make.com",
+      "2. Configure your social media platform connections",
+      "3. Set up the webhook URL in your blog CMS",
+      "4. Test the workflow with a sample blog post",
+      "5. Monitor the automation and adjust prompts as needed"
+    ],
+    "customization_tips": [
+      "Adjust image prompts for your brand style",
+      "Modify social media captions to match your voice",
+      "Add more platforms as needed",
+      "Include A/B testing for different image styles"
+    ]
   }
 }
