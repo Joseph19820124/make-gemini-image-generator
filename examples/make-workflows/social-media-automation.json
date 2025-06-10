@@ -1,0 +1,246 @@
+{
+  "name": "Social Media Image Automation",
+  "description": "Automatically generate and post social media images based on blog content",
+  "version": "1.0.0",
+  "workflow": {
+    "trigger": {
+      "type": "webhook",
+      "name": "New Blog Post",
+      "description": "Triggered when a new blog post is published",
+      "inputs": {
+        "title": "string",
+        "content": "string",
+        "summary": "string",
+        "category": "string",
+        "tags": "array",
+        "author": "string",
+        "publishDate": "datetime"
+      }
+    },
+    "modules": [
+      {
+        "id": 1,
+        "name": "Text Processor",
+        "app": "tools",
+        "module": "text-transformer",
+        "description": "Extract key themes and create image prompts",
+        "configuration": {
+          "operation": "extract_keywords",
+          "input": "{{trigger.title}} {{trigger.summary}}",
+          "max_keywords": 5
+        },
+        "outputs": {
+          "keywords": "array",
+          "themes": "array"
+        }
+      },
+      {
+        "id": 2,
+        "name": "Generate Social Media Images",
+        "app": "gemini-image-generator",
+        "module": "batch-generate",
+        "description": "Generate images for different social media platforms",
+        "configuration": {
+          "prompts": [
+            "{{trigger.title}} - Instagram post style, vibrant colors, modern design",
+            "{{trigger.title}} - Facebook cover style, professional layout",
+            "{{trigger.title}} - Twitter header style, minimalist design",
+            "{{trigger.title}} - LinkedIn post style, business professional"
+          ],
+          "style": "professional",
+          "resolution": "1080x1080",
+          "maintainConsistency": true
+        },
+        "mapping": {
+          "connection": "gemini-api-connection"
+        },
+        "outputs": {
+          "images": "array",
+          "summary": "object"
+        }
+      },
+      {
+        "id": 3,
+        "name": "Add Text Overlay",
+        "app": "tools",
+        "module": "image-editor",
+        "description": "Add title and author text to generated images",
+        "configuration": {
+          "images": "{{2.images}}",
+          "text_overlay": {
+            "title": "{{trigger.title}}",
+            "author": "by {{trigger.author}}",
+            "position": "bottom-center",
+            "font_size": "large",
+            "text_color": "white",
+            "background_color": "rgba(0,0,0,0.7)"
+          }
+        },
+        "outputs": {
+          "processed_images": "array"
+        }
+      },
+      {
+        "id": 4,
+        "name": "Upload to Cloud Storage",
+        "app": "google-drive",
+        "module": "upload-file",
+        "description": "Save generated images to Google Drive",
+        "configuration": {
+          "files": "{{3.processed_images}}",
+          "folder": "Social Media Images/{{trigger.category}}",
+          "name_pattern": "{{trigger.title}}_{{timestamp}}_{{platform}}"
+        },
+        "outputs": {
+          "uploaded_files": "array",
+          "folder_url": "string"
+        }
+      },
+      {
+        "id": 5,
+        "name": "Post to Instagram",
+        "app": "instagram-business",
+        "module": "create-post",
+        "description": "Post the Instagram-formatted image",
+        "configuration": {
+          "image": "{{filter(3.processed_images; platform; instagram)}}",
+          "caption": "{{trigger.title}}\n\n{{trigger.summary}}\n\n#{{join(trigger.tags; ' #')}}",
+          "account": "main-business-account"
+        },
+        "outputs": {
+          "post_id": "string",
+          "post_url": "string"
+        }
+      },
+      {
+        "id": 6,
+        "name": "Post to Twitter",
+        "app": "twitter",
+        "module": "create-tweet",
+        "description": "Post the Twitter-formatted image",
+        "configuration": {
+          "text": "{{trigger.title}}\n\n{{trigger.summary}}\n\n{{join(trigger.tags; ' #')}}",
+          "media": "{{filter(3.processed_images; platform; twitter)}}",
+          "account": "main-twitter-account"
+        },
+        "outputs": {
+          "tweet_id": "string",
+          "tweet_url": "string"
+        }
+      },
+      {
+        "id": 7,
+        "name": "Post to LinkedIn",
+        "app": "linkedin",
+        "module": "create-post",
+        "description": "Post the LinkedIn-formatted image",
+        "configuration": {
+          "text": "{{trigger.title}}\n\n{{trigger.summary}}\n\nRead more: [Blog Link]",
+          "image": "{{filter(3.processed_images; platform; linkedin)}}",
+          "account": "company-linkedin-page"
+        },
+        "outputs": {
+          "post_id": "string",
+          "post_url": "string"
+        }
+      },
+      {
+        "id": 8,
+        "name": "Send Notification",
+        "app": "slack",
+        "module": "send-message",
+        "description": "Notify team about successful posting",
+        "configuration": {
+          "channel": "#marketing",
+          "message": {
+            "text": "🎉 Social media images generated and posted for: {{trigger.title}}",
+            "blocks": [
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "*New Blog Post Promoted*\n{{trigger.title}}"
+                }
+              },
+              {
+                "type": "section",
+                "fields": [
+                  {
+                    "type": "mrkdwn",
+                    "text": "*Author:*\n{{trigger.author}}"
+                  },
+                  {
+                    "type": "mrkdwn",
+                    "text": "*Category:*\n{{trigger.category}}"
+                  },
+                  {
+                    "type": "mrkdwn",
+                    "text": "*Instagram:*\n<{{5.post_url}}|View Post>"
+                  },
+                  {
+                    "type": "mrkdwn",
+                    "text": "*Twitter:*\n<{{6.tweet_url}}|View Tweet>"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "connections": {
+    "gemini-api-connection": {
+      "type": "gemini-image-generator",
+      "name": "Gemini Image Generator",
+      "description": "Connection to Gemini Image Generation API",
+      "configuration": {
+        "apiKey": "{{env.GOOGLE_AI_API_KEY}}",
+        "region": "us-central1"
+      }
+    },
+    "google-drive-connection": {
+      "type": "google-drive",
+      "name": "Google Drive Storage",
+      "scopes": ["drive.file"]
+    },
+    "social-media-connections": {
+      "instagram": {
+        "type": "instagram-business",
+        "account_id": "{{env.INSTAGRAM_BUSINESS_ACCOUNT_ID}}"
+      },
+      "twitter": {
+        "type": "twitter",
+        "api_key": "{{env.TWITTER_API_KEY}}"
+      },
+      "linkedin": {
+        "type": "linkedin",
+        "company_id": "{{env.LINKEDIN_COMPANY_ID}}"
+      }
+    }
+  },
+  "settings": {
+    "error_handling": {
+      "continue_on_error": true,
+      "max_retries": 3,
+      "retry_delay": "5s"
+    },
+    "execution": {
+      "timeout": "10m",
+      "max_concurrent": 3
+    }
+  },
+  "variables": {
+    "brand_colors": {
+      "primary": "#007bff",
+      "secondary": "#6c757d",
+      "accent": "#28a745"
+    },
+    "image_templates": {
+      "instagram": "1080x1080",
+      "twitter": "1200x675",
+      "linkedin": "1200x627",
+      "facebook": "1200x630"
+    }
+  }
+}

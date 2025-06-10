@@ -1,0 +1,340 @@
+{
+  "name": "Automated Story Book Creation",
+  "description": "Generate illustrated story books from user submissions",
+  "version": "1.0.0",
+  "workflow": {
+    "trigger": {
+      "type": "google-forms",
+      "name": "Story Submission",
+      "description": "Triggered when someone submits a story for illustration",
+      "form_id": "story-submission-form",
+      "inputs": {
+        "submitter_name": "string",
+        "submitter_email": "string",
+        "story_title": "string",
+        "story_content": "text",
+        "target_age": "string",
+        "illustration_style": "string",
+        "language": "string",
+        "special_requests": "text"
+      }
+    },
+    "modules": [
+      {
+        "id": 1,
+        "name": "Analyze Story Content",
+        "app": "gemini-image-generator",
+        "module": "story-analyze",
+        "description": "Analyze story structure and extract key elements",
+        "configuration": {
+          "story": "{{trigger.story_content}}",
+          "language": "{{trigger.language}}"
+        },
+        "outputs": {
+          "story_analysis": "object",
+          "key_characters": "array",
+          "key_scenes": "array",
+          "theme": "string",
+          "mood": "string"
+        }
+      },
+      {
+        "id": 2,
+        "name": "Generate Story Illustrations",
+        "app": "gemini-image-generator",
+        "module": "story-illustration",
+        "description": "Generate consistent illustrations for the story",
+        "configuration": {
+          "story": "{{trigger.story_content}}",
+          "illustrationStyle": "{{trigger.illustration_style}}",
+          "maxIllustrations": 8,
+          "maintainConsistency": true,
+          "characterConsistency": true,
+          "generateTitle": true,
+          "language": "{{trigger.language}}"
+        },
+        "outputs": {
+          "illustrations": "array",
+          "story_metadata": "object",
+          "suggested_titles": "array"
+        }
+      },
+      {
+        "id": 3,
+        "name": "Enhance Cover Design",
+        "app": "gemini-image-generator",
+        "module": "generate-image",
+        "description": "Create an attractive book cover",
+        "configuration": {
+          "prompt": "Children's book cover design for '{{coalesce(trigger.story_title; first(2.suggested_titles))}}', {{trigger.illustration_style}} style, featuring {{join(1.key_characters; ' and ')}}, attractive title layout, age-appropriate for {{trigger.target_age}}",
+          "style": "{{trigger.illustration_style}}",
+          "resolution": "1024x1792",
+          "quality": "hd"
+        },
+        "outputs": {
+          "cover_image": "object"
+        }
+      },
+      {
+        "id": 4,
+        "name": "Create Page Layouts",
+        "app": "tools",
+        "module": "document-generator",
+        "description": "Generate PDF pages with text and illustrations",
+        "configuration": {
+          "template": "children-book-template",
+          "cover": {
+            "image": "{{3.cover_image.url}}",
+            "title": "{{coalesce(trigger.story_title; first(2.suggested_titles))}}",
+            "author": "{{trigger.submitter_name}}",
+            "age_group": "{{trigger.target_age}}"
+          },
+          "pages": {
+            "story_text": "{{trigger.story_content}}",
+            "illustrations": "{{2.illustrations}}",
+            "layout": "text-image-alternating",
+            "font_size": "large",
+            "line_spacing": "1.5"
+          },
+          "back_cover": {
+            "summary": "A wonderful story by {{trigger.submitter_name}}",
+            "age_recommendation": "{{trigger.target_age}}"
+          }
+        },
+        "outputs": {
+          "pdf_pages": "array",
+          "page_count": "number"
+        }
+      },
+      {
+        "id": 5,
+        "name": "Compile Final PDF",
+        "app": "tools",
+        "module": "pdf-merger",
+        "description": "Combine all pages into final story book PDF",
+        "configuration": {
+          "pages": "{{4.pdf_pages}}",
+          "metadata": {
+            "title": "{{coalesce(trigger.story_title; first(2.suggested_titles))}}",
+            "author": "{{trigger.submitter_name}}",
+            "subject": "Children's Story Book",
+            "keywords": "{{join(1.key_characters; ', ')}}, {{1.theme}}",
+            "creator": "AI Story Book Generator"
+          },
+          "compression": "medium",
+          "quality": "print-ready"
+        },
+        "outputs": {
+          "final_pdf": "file",
+          "file_size": "number",
+          "total_pages": "number"
+        }
+      },
+      {
+        "id": 6,
+        "name": "Upload to Cloud Storage",
+        "app": "google-drive",
+        "module": "upload-file",
+        "description": "Save the completed story book",
+        "configuration": {
+          "file": "{{5.final_pdf}}",
+          "folder": "Generated Story Books/{{formatDate(now; 'YYYY/MM')}}",
+          "name": "{{coalesce(trigger.story_title; first(2.suggested_titles))}} - {{trigger.submitter_name}} - {{formatDate(now; 'YYYY-MM-DD')}}.pdf",
+          "sharing": {
+            "access": "view",
+            "allow_download": true
+          }
+        },
+        "outputs": {
+          "drive_file": "object",
+          "shareable_link": "string"
+        }
+      },
+      {
+        "id": 7,
+        "name": "Create Interactive Web Version",
+        "app": "tools",
+        "module": "html-generator",
+        "description": "Create an interactive web version of the story",
+        "configuration": {
+          "template": "interactive-storybook",
+          "content": {
+            "title": "{{coalesce(trigger.story_title; first(2.suggested_titles))}}",
+            "author": "{{trigger.submitter_name}}",
+            "story_pages": "{{2.illustrations}}",
+            "story_text": "{{trigger.story_content}}",
+            "style": "{{trigger.illustration_style}}"
+          },
+          "features": {
+            "audio_narration": true,
+            "page_turning_animation": true,
+            "interactive_elements": true,
+            "responsive_design": true
+          }
+        },
+        "outputs": {
+          "html_files": "array",
+          "web_assets": "array"
+        }
+      },
+      {
+        "id": 8,
+        "name": "Deploy Web Version",
+        "app": "netlify",
+        "module": "deploy-site",
+        "description": "Deploy interactive version to web",
+        "configuration": {
+          "files": "{{7.html_files}}",
+          "assets": "{{7.web_assets}}",
+          "site_name": "storybook-{{slugify(coalesce(trigger.story_title; first(2.suggested_titles)))}}-{{timestamp}}",
+          "custom_domain": false
+        },
+        "outputs": {
+          "website_url": "string",
+          "deployment_id": "string"
+        }
+      },
+      {
+        "id": 9,
+        "name": "Generate Certificate",
+        "app": "tools",
+        "module": "certificate-generator",
+        "description": "Create a certificate of authorship",
+        "configuration": {
+          "template": "young-author-certificate",
+          "data": {
+            "author_name": "{{trigger.submitter_name}}",
+            "story_title": "{{coalesce(trigger.story_title; first(2.suggested_titles))}}",
+            "completion_date": "{{formatDate(now; 'MMMM DD, YYYY')}}",
+            "illustration_count": "{{length(2.illustrations)}}",
+            "page_count": "{{5.total_pages}}"
+          },
+          "format": "PDF",
+          "size": "letter"
+        },
+        "outputs": {
+          "certificate_pdf": "file"
+        }
+      },
+      {
+        "id": 10,
+        "name": "Send Completion Email",
+        "app": "gmail",
+        "module": "send-email",
+        "description": "Email the completed story book to the submitter",
+        "configuration": {
+          "to": "{{trigger.submitter_email}}",
+          "subject": "🎉 Your Story Book is Ready: {{coalesce(trigger.story_title; first(2.suggested_titles))}}",
+          "body": {
+            "type": "html",
+            "content": {
+              "template": "story-completion-email",
+              "variables": {
+                "author_name": "{{trigger.submitter_name}}",
+                "story_title": "{{coalesce(trigger.story_title; first(2.suggested_titles))}}",
+                "illustration_count": "{{length(2.illustrations)}}",
+                "pdf_download_link": "{{6.shareable_link}}",
+                "web_version_link": "{{8.website_url}}",
+                "cover_image": "{{3.cover_image.url}}"
+              }
+            }
+          },
+          "attachments": [
+            {
+              "name": "{{coalesce(trigger.story_title; first(2.suggested_titles))}}.pdf",
+              "file": "{{5.final_pdf}}"
+            },
+            {
+              "name": "Certificate of Authorship.pdf",
+              "file": "{{9.certificate_pdf}}"
+            }
+          ]
+        },
+        "outputs": {
+          "email_sent": "boolean",
+          "message_id": "string"
+        }
+      },
+      {
+        "id": 11,
+        "name": "Log Completion",
+        "app": "airtable",
+        "module": "create-record",
+        "description": "Log the completed story book",
+        "configuration": {
+          "table": "Story Book Gallery",
+          "fields": {
+            "Author_Name": "{{trigger.submitter_name}}",
+            "Author_Email": "{{trigger.submitter_email}}",
+            "Story_Title": "{{coalesce(trigger.story_title; first(2.suggested_titles))}}",
+            "Target_Age": "{{trigger.target_age}}",
+            "Illustration_Style": "{{trigger.illustration_style}}",
+            "Language": "{{trigger.language}}",
+            "Story_Theme": "{{1.theme}}",
+            "Characters": "{{join(1.key_characters; ', ')}}",
+            "Illustration_Count": "{{length(2.illustrations)}}",
+            "Page_Count": "{{5.total_pages}}",
+            "Creation_Date": "{{now}}",
+            "PDF_Link": "{{6.shareable_link}}",
+            "Web_Version": "{{8.website_url}}",
+            "Cover_Image": "{{3.cover_image.url}}",
+            "Status": "Completed",
+            "Email_Sent": "{{10.email_sent}}"
+          }
+        },
+        "outputs": {
+          "gallery_record": "object"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "gemini-connection": {
+      "type": "gemini-image-generator",
+      "configuration": {
+        "apiKey": "{{env.GOOGLE_AI_API_KEY}}",
+        "region": "us-central1"
+      }
+    },
+    "google-services": {
+      "drive": {
+        "type": "google-drive",
+        "scopes": ["drive.file"]
+      },
+      "gmail": {
+        "type": "gmail",
+        "scopes": ["gmail.send"]
+      },
+      "forms": {
+        "type": "google-forms",
+        "scopes": ["forms.readonly"]
+      }
+    },
+    "storage-and-hosting": {
+      "netlify": {
+        "type": "netlify",
+        "api_token": "{{env.NETLIFY_API_TOKEN}}"
+      },
+      "airtable": {
+        "type": "airtable",
+        "api_key": "{{env.AIRTABLE_API_KEY}}",
+        "base_id": "{{env.AIRTABLE_STORYBOOKS_BASE_ID}}"
+      }
+    }
+  },
+  "settings": {
+    "error_handling": {
+      "continue_on_error": true,
+      "max_retries": 2,
+      "retry_delay": "15s",
+      "fallback_actions": {
+        "email_notification": "admin@storybooks.com",
+        "error_logging": true
+      }
+    },
+    "execution": {
+      "timeout": "20m",
+      "max_concurrent": 1
+    }
+  }
+}
